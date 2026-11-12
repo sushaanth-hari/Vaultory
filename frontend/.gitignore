@@ -1,3 +1,13 @@
+<<<<<<< HEAD
+=======
+# Environment files
+.env
+.env.*
+*.env
+*.env.*
+!.env.example
+
+>>>>>>> 97b2a4b (chore: remove env files and add gitignore)
 # Logs
 logs
 *.log
