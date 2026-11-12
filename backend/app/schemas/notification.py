@@ -13,6 +13,12 @@ class TelegramSettingsUpdate(BaseModel):
 class SendTestNotificationRequest(BaseModel):
     message: Optional[str] = None
 
+class TelegramSimulateMessageRequest(BaseModel):
+    text: str
+    chat_id: Optional[str] = "987654321"
+    username: Optional[str] = "vaultory_user"
+    update_id: Optional[int] = None
+
 class NotificationLogResponse(BaseModel):
     id: int
     user_id: int

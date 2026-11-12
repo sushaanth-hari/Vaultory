@@ -20,6 +20,7 @@ from app.core.database import Base, engine
 # Import all models so metadata knows about all tables
 import app.models
 from app.services.scheduler_service import warranty_scheduler
+from app.services.telegram_service import telegram_service
 
 # Routers
 from app.api.routers import (
@@ -61,10 +62,20 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Could not start APScheduler: {e}")
 
+    # Start Telegram Bot polling service if token is configured
+    try:
+        await telegram_service.start_polling()
+    except Exception as e:
+        logger.error(f"Could not start Telegram Bot polling: {e}")
+
     yield
 
     # Shutdown
     logger.info("Shutting down Vaultory...")
+    try:
+        await telegram_service.stop_polling()
+    except Exception:
+        pass
     try:
         warranty_scheduler.shutdown()
     except Exception:

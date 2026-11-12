@@ -11,7 +11,13 @@ import {
   RefreshCw, 
   Sparkles,
   ShieldCheck,
-  Zap
+  Zap,
+  Copy,
+  Check,
+  Terminal,
+  HelpCircle,
+  Unlink,
+  MessageSquare
 } from 'lucide-react';
 
 export default function TelegramSettings() {
@@ -25,7 +31,8 @@ export default function TelegramSettings() {
     notify_7_days: true,
     notify_1_day: true,
     bot_username: 'VaultoryWarrantyBot',
-    connect_link: ''
+    connect_link: '',
+    is_configured: false
   });
   
   const [logs, setLogs] = useState([]);
@@ -33,7 +40,14 @@ export default function TelegramSettings() {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [feedback, setFeedback] = useState({ type: '', message: '' });
+  const [copiedCmd, setCopiedCmd] = useState(false);
+
+  // Bot Simulator State
+  const [simText, setSimText] = useState('/start');
+  const [simLoading, setSimLoading] = useState(false);
+  const [simResponse, setSimResponse] = useState(null);
 
   const fetchSettingsAndLogs = async () => {
     try {
@@ -54,6 +68,35 @@ export default function TelegramSettings() {
   useEffect(() => {
     fetchSettingsAndLogs();
   }, []);
+
+  const handleSyncStatus = async () => {
+    setRefreshing(true);
+    setFeedback({ type: '', message: '' });
+    try {
+      const [sRes, lRes] = await Promise.all([
+        api.get('/notifications/settings'),
+        api.get('/notifications/logs')
+      ]);
+      setSettings(sRes.data);
+      setLogs(lRes.data);
+      await refreshUser();
+      if (sRes.data.telegram_chat_id) {
+        setFeedback({ 
+          type: 'success', 
+          message: `Linked! Telegram Chat ID detected: ${sRes.data.telegram_chat_id}` 
+        });
+      } else {
+        setFeedback({ 
+          type: 'info', 
+          message: 'No Telegram account linked yet. Open the bot and press START or send /link.' 
+        });
+      }
+    } catch (err) {
+      console.error('Refresh failed:', err);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const handleSaveSettings = async (e) => {
     e.preventDefault();
@@ -82,7 +125,7 @@ export default function TelegramSettings() {
 
   const handleSendTest = async () => {
     if (!settings.telegram_chat_id) {
-      setFeedback({ type: 'error', message: 'Please enter and save your Telegram Chat ID first.' });
+      setFeedback({ type: 'error', message: 'Please connect your bot or enter your Telegram Chat ID first.' });
       return;
     }
 
@@ -120,6 +163,41 @@ export default function TelegramSettings() {
     }
   };
 
+  const handleCopyCommand = (text) => {
+    navigator.clipboard.writeText(text);
+    setCopiedCmd(true);
+    setTimeout(() => setCopiedCmd(false), 2000);
+  };
+
+  const handleRunSimulator = async (commandToRun) => {
+    const textToExecute = commandToRun || simText;
+    if (!textToExecute) return;
+    setSimLoading(true);
+    setSimResponse(null);
+
+    try {
+      const res = await api.post('/notifications/telegram/simulate-message', {
+        text: textToExecute,
+        chat_id: settings.telegram_chat_id || '9188525411',
+        username: settings.telegram_username || user?.email?.split('@')[0] || 'vaultory_user'
+      });
+      setSimResponse(res.data);
+      // If command linked or unlinked, refresh settings in background
+      if (['start', 'link', 'unlink'].includes(res.data.command)) {
+        fetchSettingsAndLogs();
+        refreshUser();
+      }
+    } catch (err) {
+      console.error('Simulation failed:', err);
+      setSimResponse({
+        status: 'error',
+        reply_text: err.response?.data?.detail || 'Simulation error. Check backend logs.'
+      });
+    } finally {
+      setSimLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -129,6 +207,10 @@ export default function TelegramSettings() {
   }
 
   const isConnected = Boolean(settings.telegram_chat_id && settings.telegram_notifications_enabled);
+  const botUsername = settings.bot_username || 'VaultoryWarrantyBot';
+  const directConnectLink = settings.connect_link || `https://t.me/${botUsername}?start=${user?.id || 1}`;
+  const startCommand = `/start ${user?.id || 1}`;
+  const linkCommand = `/link ${user?.email || 'my_email@example.com'}`;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 animate-fade-in pb-12">
@@ -144,48 +226,78 @@ export default function TelegramSettings() {
         <div className={`p-4 rounded-xl text-xs flex items-center space-x-2.5 ${
           feedback.type === 'success' 
             ? 'bg-emerald-50 border border-emerald-200 text-emerald-800' 
-            : 'bg-rose-50 border border-rose-200 text-rose-800'
+            : (feedback.type === 'info' 
+                ? 'bg-blue-50 border border-blue-200 text-blue-800' 
+                : 'bg-rose-50 border border-rose-200 text-rose-800')
         }`}>
-          {feedback.type === 'success' ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" /> : <AlertCircle className="w-4 h-4 flex-shrink-0" />}
+          {feedback.type === 'success' ? (
+            <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+          ) : (
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          )}
           <span>{feedback.message}</span>
         </div>
       )}
 
-      {/* Connection Status Card */}
-      <div className={`border rounded-2xl p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+      {/* Main Telegram Connection Hero Card */}
+      <div className={`border rounded-2xl p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-5 ${
         isConnected ? 'bg-emerald-50/50 border-emerald-200' : 'bg-slate-50 border-slate-200'
       }`}>
-        <div className="flex items-center space-x-3.5">
-          <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white shadow-xs ${
-            isConnected ? 'bg-emerald-600' : 'bg-slate-700'
+        <div className="flex items-center space-x-4">
+          <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-white shadow-sm flex-shrink-0 ${
+            isConnected ? 'bg-emerald-600' : 'bg-[#24A1DE]'
           }`}>
-            <Send className="w-6 h-6" />
+            <Send className="w-7 h-7" />
           </div>
           <div>
             <div className="flex items-center space-x-2">
-              <h3 className="font-bold text-slate-900 text-sm">
-                Telegram Status: {isConnected ? 'Connected & Active' : 'Not Connected'}
+              <h3 className="font-bold text-slate-900 text-base">
+                Telegram Bot: @{botUsername}
               </h3>
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                isConnected ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'
+              <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
+                isConnected ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
               }`}>
-                {isConnected ? 'ONLINE' : 'INACTIVE'}
+                {isConnected ? 'ONLINE & LINKED' : 'READY TO CONNECT'}
               </span>
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-xs text-slate-500 mt-1">
               {isConnected 
-                ? `Alerts sending to Chat ID: ${settings.telegram_chat_id} (@${settings.telegram_username || 'user'})`
-                : 'Follow the steps below to connect your Telegram account.'}
+                ? `Proactive alerts active for Chat ID: ${settings.telegram_chat_id} ${settings.telegram_username ? `(@${settings.telegram_username})` : ''}`
+                : 'Click the button to open Telegram and link your account with one click.'}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center space-x-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Primary Connect Button */}
+          <a
+            href={directConnectLink}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center space-x-2 px-4 py-2.5 bg-[#24A1DE] hover:bg-[#1f8ec4] text-white rounded-xl text-xs font-bold shadow-sm transition hover:shadow"
+            title="Open Telegram Bot in app or web"
+          >
+            <Send className="w-3.5 h-3.5" />
+            <span>Connect on Telegram</span>
+            <ExternalLink className="w-3 h-3 opacity-80" />
+          </a>
+
+          {/* Sync Connection Button */}
+          <button
+            onClick={handleSyncStatus}
+            disabled={refreshing}
+            className="inline-flex items-center space-x-1.5 px-3.5 py-2.5 border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold shadow-2xs transition disabled:opacity-50"
+            title="Sync connection status from Telegram"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-slate-500 ${refreshing ? 'animate-spin' : ''}`} />
+            <span>Check Status</span>
+          </button>
+
           {isConnected && (
             <button
               onClick={handleSendTest}
               disabled={testing}
-              className="inline-flex items-center space-x-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold shadow-xs transition disabled:opacity-50"
+              className="inline-flex items-center space-x-1.5 px-3.5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold shadow-2xs transition disabled:opacity-50"
             >
               {testing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
               <span>Send Test Alert</span>
@@ -195,23 +307,23 @@ export default function TelegramSettings() {
           <button
             onClick={handleTriggerManualScan}
             disabled={scanning}
-            className="inline-flex items-center space-x-1.5 px-3.5 py-2 border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold transition disabled:opacity-50"
+            className="inline-flex items-center space-x-1.5 px-3 py-2.5 border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 rounded-xl text-xs font-medium transition disabled:opacity-50"
             title="Execute immediate APScheduler warranty scan"
           >
-            {scanning ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Clock className="w-3.5 h-3.5 text-slate-500" />}
-            <span>Check Expirations Now</span>
+            {scanning ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Clock className="w-3.5 h-3.5 text-slate-400" />}
+            <span className="hidden sm:inline">Scan Expirations</span>
           </button>
         </div>
       </div>
 
-      {/* Two Columns: Setup Guide & Settings Form */}
+      {/* Two Columns: Setup Instructions & Settings Form */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Setup Instructions */}
-        <div className="lg:col-span-5 bg-white border border-slate-200/80 rounded-2xl p-6 shadow-xs flex flex-col justify-between">
+        {/* Left Column: Quick Connect Instructions */}
+        <div className="lg:col-span-5 bg-white border border-slate-200/80 rounded-2xl p-6 shadow-xs flex flex-col justify-between space-y-6">
           <div>
             <h3 className="font-bold text-slate-900 text-sm mb-3 flex items-center space-x-2">
               <Sparkles className="w-4 h-4 text-blue-600" />
-              <span>How to Connect Your Telegram</span>
+              <span>Easy Account Linking</span>
             </h3>
 
             <div className="space-y-4 text-xs text-slate-600">
@@ -220,19 +332,10 @@ export default function TelegramSettings() {
                   1
                 </span>
                 <div>
-                  <p className="font-semibold text-slate-800">Start the Telegram Bot</p>
+                  <p className="font-semibold text-slate-800">One-Click Telegram Launch</p>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    Open Telegram and search for <b>@{settings.bot_username || 'VaultoryWarrantyBot'}</b> or click the link below.
+                    Click <b>Connect on Telegram</b> above or search for <b>@{botUsername}</b> in your Telegram app.
                   </p>
-                  <a
-                    href={settings.connect_link || `https://t.me/${settings.bot_username}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-1.5 inline-flex items-center space-x-1 text-blue-600 hover:underline font-semibold"
-                  >
-                    <span>Open in Telegram</span>
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
                 </div>
               </div>
 
@@ -241,10 +344,32 @@ export default function TelegramSettings() {
                   2
                 </span>
                 <div>
-                  <p className="font-semibold text-slate-800">Obtain your Chat ID</p>
+                  <p className="font-semibold text-slate-800">Tap START or Send Link Command</p>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    Send <code>/start</code> to the bot, or talk to <b>@userinfobot</b> to view your numerical Chat ID (e.g. <code>582910482</code>).
+                    Tap the <b>START</b> button in Telegram, or send either of these commands:
                   </p>
+                  <div className="mt-2 space-y-1.5">
+                    <div className="flex items-center justify-between bg-slate-100 p-2 rounded-lg font-mono text-[11px] text-slate-800">
+                      <span>{startCommand}</span>
+                      <button 
+                        onClick={() => handleCopyCommand(startCommand)}
+                        className="text-slate-500 hover:text-slate-900 ml-2"
+                        title="Copy command"
+                      >
+                        {copiedCmd ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                    <div className="flex items-center justify-between bg-slate-100 p-2 rounded-lg font-mono text-[11px] text-slate-800">
+                      <span className="truncate">{linkCommand}</span>
+                      <button 
+                        onClick={() => handleCopyCommand(linkCommand)}
+                        className="text-slate-500 hover:text-slate-900 ml-2"
+                        title="Copy command"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -253,27 +378,47 @@ export default function TelegramSettings() {
                   3
                 </span>
                 <div>
-                  <p className="font-semibold text-slate-800">Save and Verify</p>
+                  <p className="font-semibold text-slate-800">Automatic Sync</p>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    Paste your Chat ID in the form, enable the notification toggle, and hit "Send Test Alert" to verify delivery.
+                    Your Vaultory account links instantly upon receiving the message. Click <b>Check Status</b> above to confirm.
                   </p>
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="mt-6 pt-4 border-t border-slate-100 bg-slate-50/60 p-3 rounded-xl border border-slate-100">
-            <p className="text-[11px] font-semibold text-slate-700">Duplicate Prevention Guarantee</p>
-            <p className="text-[11px] text-slate-500 mt-0.5">
-              Vaultory records every notification in a persistent audit log so you will never receive duplicate reminders for the same warranty milestone.
+          {/* Interactive Bot Commands Reference */}
+          <div className="pt-4 border-t border-slate-100 bg-slate-50/70 p-4 rounded-xl border border-slate-100 space-y-2">
+            <p className="text-xs font-bold text-slate-800 flex items-center space-x-1.5">
+              <Terminal className="w-3.5 h-3.5 text-slate-600" />
+              <span>Available Bot Commands</span>
             </p>
+            <div className="grid grid-cols-2 gap-1.5 text-[11px]">
+              <div className="p-1.5 bg-white rounded border border-slate-200">
+                <code className="font-bold text-blue-600">/warranties</code>
+                <p className="text-[10px] text-slate-500">List all your warranties</p>
+              </div>
+              <div className="p-1.5 bg-white rounded border border-slate-200">
+                <code className="font-bold text-blue-600">/status</code>
+                <p className="text-[10px] text-slate-500">Check alerts & account</p>
+              </div>
+              <div className="p-1.5 bg-white rounded border border-slate-200">
+                <code className="font-bold text-blue-600">/help</code>
+                <p className="text-[10px] text-slate-500">View command guide</p>
+              </div>
+              <div className="p-1.5 bg-white rounded border border-slate-200">
+                <code className="font-bold text-rose-600">/unlink</code>
+                <p className="text-[10px] text-slate-500">Disconnect Telegram</p>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Configuration Form */}
+        {/* Right Column: Notification Preferences Form */}
         <div className="lg:col-span-7 bg-white border border-slate-200/80 rounded-2xl p-6 shadow-xs">
-          <h3 className="font-bold text-slate-900 text-sm mb-4 pb-2 border-b border-slate-100">
-            Notification Preferences
+          <h3 className="font-bold text-slate-900 text-sm mb-4 pb-2 border-b border-slate-100 flex items-center justify-between">
+            <span>Notification & Account Preferences</span>
+            <span className="text-[11px] font-normal text-slate-400">Manual adjustments</span>
           </h3>
 
           <form onSubmit={handleSaveSettings} className="space-y-4 text-xs">
@@ -285,10 +430,10 @@ export default function TelegramSettings() {
                 type="text"
                 value={settings.telegram_chat_id || ''}
                 onChange={(e) => setSettings({ ...settings, telegram_chat_id: e.target.value })}
-                placeholder="e.g. 582910482"
+                placeholder="e.g. 9188525411"
                 className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-mono text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-900"
               />
-              <p className="text-[10px] text-slate-400 mt-1">Unique numeric identifier of your Telegram conversation with the bot.</p>
+              <p className="text-[10px] text-slate-400 mt-1">Automatically set when you click Connect, or entered manually.</p>
             </div>
 
             <div>
@@ -369,6 +514,79 @@ export default function TelegramSettings() {
         </div>
       </div>
 
+      {/* Interactive Telegram Bot Simulator */}
+      <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-xs space-y-4">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+          <div>
+            <h3 className="font-bold text-slate-900 text-sm flex items-center space-x-2">
+              <MessageSquare className="w-4 h-4 text-blue-600" />
+              <span>Interactive Telegram Bot Tester</span>
+            </h3>
+            <p className="text-xs text-slate-500">
+              Test how the bot replies to commands directly from your browser.
+            </p>
+          </div>
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+            LIVE SIMULATOR
+          </span>
+        </div>
+
+        {/* Quick Command Pills */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold text-slate-600 mr-1">Quick Test:</span>
+          {['/warranties', '/status', '/help', startCommand, linkCommand, '/unknown_cmd'].map((cmd) => (
+            <button
+              key={cmd}
+              onClick={() => {
+                setSimText(cmd);
+                handleRunSimulator(cmd);
+              }}
+              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-mono transition"
+            >
+              {cmd}
+            </button>
+          ))}
+        </div>
+
+        {/* Input Bar */}
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <input
+              type="text"
+              value={simText}
+              onChange={(e) => setSimText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleRunSimulator();
+              }}
+              placeholder="Type /start, /warranties, /status, /help..."
+              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-900"
+            />
+          </div>
+          <button
+            onClick={() => handleRunSimulator()}
+            disabled={simLoading || !simText}
+            className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold transition disabled:opacity-50 flex items-center space-x-1.5"
+          >
+            {simLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+            <span>Execute</span>
+          </button>
+        </div>
+
+        {/* Simulator Output Window */}
+        {simResponse && (
+          <div className="mt-3 bg-slate-900 text-slate-100 p-4 rounded-xl font-mono text-xs space-y-2 border border-slate-800">
+            <div className="flex items-center justify-between text-[11px] text-slate-400 border-b border-slate-800 pb-1.5">
+              <span>Command: <b className="text-white">{simResponse.command || 'custom'}</b></span>
+              <span>Status: <b className="text-emerald-400">{simResponse.status}</b></span>
+            </div>
+            <div 
+              className="whitespace-pre-wrap leading-relaxed text-slate-200 text-[11px]"
+              dangerouslySetInnerHTML={{ __html: simResponse.reply_text }}
+            />
+          </div>
+        )}
+      </div>
+
       {/* Notification Logs Table */}
       <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-xs space-y-4">
         <div className="flex items-center justify-between pb-2 border-b border-slate-100">
@@ -427,4 +645,3 @@ export default function TelegramSettings() {
     </div>
   );
 }
-

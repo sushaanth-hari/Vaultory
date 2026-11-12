@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/client';
+import { useAuth } from '../context/AuthContext';
 import StatCard from '../components/StatCard';
 import StatusBadge from '../components/StatusBadge';
 import { 
@@ -21,6 +22,7 @@ import {
 } from 'lucide-react';
 
 export default function Dashboard() {
+  const { user } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -177,10 +179,20 @@ export default function Dashboard() {
 
           {/* Telegram Alert Callout */}
           <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between text-xs">
-            <span className="text-slate-500 text-[11px]">Automatic Telegram reminders active</span>
-            <Link to="/telegram-settings" className="font-semibold text-blue-600 hover:underline flex items-center space-x-1">
-              <Send className="w-3 h-3 text-blue-500" />
-              <span>Configure Bot</span>
+            <div className="flex items-center space-x-1.5">
+              <span className={`w-2 h-2 rounded-full ${user?.telegram_chat_id ? 'bg-emerald-500' : 'bg-amber-400 animate-pulse'}`} />
+              <span className="text-slate-500 text-[11px]">
+                {user?.telegram_chat_id ? 'Telegram alerts active' : 'Telegram alerts inactive'}
+              </span>
+            </div>
+            <Link 
+              to="/telegram-settings" 
+              className={`font-semibold hover:underline flex items-center space-x-1 ${
+                user?.telegram_chat_id ? 'text-blue-600' : 'text-[#24A1DE] font-bold'
+              }`}
+            >
+              <Send className="w-3 h-3 text-[#24A1DE]" />
+              <span>{user?.telegram_chat_id ? 'Manage Bot' : 'Connect Telegram'}</span>
             </Link>
           </div>
         </div>

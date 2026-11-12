@@ -16,7 +16,7 @@ def initialize_engine():
     pg_url = settings.DATABASE_URL
     try:
         logger.info(f"Attempting connection to PostgreSQL database at {pg_url.split('@')[-1] if '@' in pg_url else pg_url}...")
-        test_engine = create_engine(pg_url, pool_pre_ping=True, connect_args={"connect_timeout": 3})
+        test_engine = create_engine(pg_url, pool_pre_ping=True, connect_args={"connect_timeout": 1})
         with test_engine.connect() as conn:
             pass
         engine = test_engine

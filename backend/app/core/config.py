@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     
     # Database
     DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:postgres@localhost:5432/vaultory")
-    FALLBACK_SQLITE_URL: str = "sqlite:///./vaultory.db"
+    FALLBACK_SQLITE_URL: str = f"sqlite:///{os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'vaultory.db').replace('\\', '/')}"
     
     # Security
     SECRET_KEY: str = os.getenv("SECRET_KEY", "vaultory_super_secret_jwt_key_2026_production_grade_change_in_env")
@@ -24,12 +24,18 @@ class Settings(BaseSettings):
     
     TELEGRAM_BOT_TOKEN: Optional[str] = os.getenv("TELEGRAM_BOT_TOKEN", "")
     TELEGRAM_BOT_USERNAME: Optional[str] = os.getenv("TELEGRAM_BOT_USERNAME", "VaultoryWarrantyBot")
+    TELEGRAM_WEBHOOK_URL: Optional[str] = os.getenv("TELEGRAM_WEBHOOK_URL", "")
     
     TESSERACT_CMD: Optional[str] = os.getenv("TESSERACT_CMD", r"C:\Program Files\Tesseract-OCR\tesseract.exe")
     UPLOAD_DIR: str = os.path.join(os.getcwd(), "backend", "uploads")
     
     class Config:
-        env_file = ".env"
+        env_file = (
+            os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "backend", ".env"),
+            os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env"),
+            ".env",
+            "backend/.env"
+        )
         extra = "allow"
 
 settings = Settings()

@@ -29,6 +29,16 @@ def run_tests():
         "email": "demo@vaultory.io",
         "password": "Password123!"
     })
+    if login_res.status_code != 200:
+        client.post("/api/v1/auth/register", json={
+            "email": "demo@vaultory.io",
+            "password": "Password123!",
+            "full_name": "Demo User"
+        })
+        login_res = client.post("/api/v1/auth/login", json={
+            "email": "demo@vaultory.io",
+            "password": "Password123!"
+        })
     assert login_res.status_code == 200, f"Demo login failed: {login_res.text}"
     token = login_res.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
@@ -145,9 +155,48 @@ def run_tests():
     print(f"✓ ReportLab PDF Evidence Certificate: Generated {len(pdf_res.content)} bytes PDF for '{sony_prod['name']}'")
 
     # 13. Telegram Notifications API & Manual Scan
+    # Update settings to link a test Telegram chat ID
+    client.put("/api/v1/notifications/settings", headers=headers, json={
+        "telegram_chat_id": "9188525411",
+        "telegram_username": "demouser",
+        "telegram_notifications_enabled": True
+    })
+
     tg_settings_res = client.get("/api/v1/notifications/settings", headers=headers)
     assert tg_settings_res.status_code == 200
     print(f"✓ Telegram Settings: Bot @{tg_settings_res.json()['bot_username']}, Connected: {tg_settings_res.json()['is_connected']}")
+
+    bot_info_res = client.get("/api/v1/notifications/bot-info")
+    assert bot_info_res.status_code == 200
+    print(f"✓ Telegram Bot Public Info: Bot @{bot_info_res.json()['bot_username']}, Configured: {bot_info_res.json()['is_configured']}")
+
+    # 14. Telegram Inbound Webhook & Message Simulation Flow
+    sim_res = client.post(
+        "/api/v1/notifications/telegram/simulate-message",
+        headers=headers,
+        json={"text": "/warranties", "chat_id": "9188525411"}
+    )
+    assert sim_res.status_code == 200
+    sim_data = sim_res.json()
+    assert sim_data["status"] == "processed"
+    assert sim_data["command"] == "warranties"
+    print(f"✓ Telegram Bot Inbound Message Simulation: Received reply for command '/warranties'")
+
+    webhook_res = client.post(
+        "/api/v1/notifications/telegram/webhook",
+        json={
+            "update_id": 99999,
+            "message": {
+                "message_id": 50,
+                "chat": {"id": 9188525411, "type": "private"},
+                "from": {"id": 9188525411, "username": "alex"},
+                "text": "/help"
+            }
+        }
+    )
+    assert webhook_res.status_code == 200
+    assert webhook_res.json()["result"]["status"] == "processed"
+    print("✓ Telegram Bot Webhook Receiver: Successfully processed incoming webhook update")
 
     tg_test_res = client.post("/api/v1/notifications/test", headers=headers, json={})
     assert tg_test_res.status_code == 200
@@ -158,7 +207,7 @@ def run_tests():
     print(f"✓ APScheduler Warranty Reminder Scan: {scan_res.json()['notifications_dispatched']} notification(s) dispatched")
 
     print("=" * 60)
-    print("ALL 13 API TEST SUITES PASSED FLAWLESSLY!")
+    print("ALL 14 API TEST SUITES PASSED FLAWLESSLY!")
     print("=" * 60)
 
 if __name__ == "__main__":

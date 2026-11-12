@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { 
   User, 
@@ -9,7 +10,8 @@ import {
   CheckCircle2, 
   AlertCircle,
   Calendar,
-  KeyRound
+  KeyRound,
+  ExternalLink
 } from 'lucide-react';
 
 export default function UserProfile() {
@@ -172,6 +174,32 @@ export default function UserProfile() {
             </button>
           </div>
         </form>
+      </div>
+
+      {/* Telegram Alerts Card */}
+      <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center space-x-3.5">
+          <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white ${user?.telegram_chat_id ? 'bg-emerald-600' : 'bg-[#24A1DE]'}`}>
+            <Send className="w-6 h-6" />
+          </div>
+          <div>
+            <h4 className="font-bold text-slate-900 text-sm">
+              Telegram Warranty Notifications: {user?.telegram_chat_id ? 'Connected' : 'Not Connected'}
+            </h4>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {user?.telegram_chat_id 
+                ? `Active for Chat ID: ${user.telegram_chat_id}` 
+                : 'Connect your bot to receive automatic 30-day, 7-day, and 1-day reminders.'}
+            </p>
+          </div>
+        </div>
+        <Link
+          to="/telegram-settings"
+          className="inline-flex items-center space-x-1.5 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-semibold shadow-xs transition"
+        >
+          <span>{user?.telegram_chat_id ? 'Manage Settings' : 'Connect Telegram Bot'}</span>
+          <ExternalLink className="w-3.5 h-3.5 ml-1" />
+        </Link>
       </div>
     </div>
   );
