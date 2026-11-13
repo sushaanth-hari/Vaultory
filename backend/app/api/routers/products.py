@@ -1,4 +1,5 @@
 from typing import List, Optional
+import os
 from datetime import datetime, date, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
 from sqlalchemy.orm import Session
@@ -9,6 +10,8 @@ from app.models.warranty import Warranty
 from app.models.user import User
 from app.schemas.product import ProductCreate, ProductUpdate, ProductResponse
 from app.services.cloudinary_service import storage_service
+from app.services.ocr_service import ocr_service
+from app.services.ai_service import ai_service
 from app.api.deps import get_current_user
 
 router = APIRouter(prefix="/products", tags=["Products"])
@@ -194,6 +197,31 @@ async def upload_product_receipt(
         raise HTTPException(status_code=404, detail="Product not found")
 
     file_url, filename = await storage_service.upload_file(file, folder="vaultory/receipts")
+    local_path = storage_service.get_local_path_from_url(file_url)
+
+    # Validate that uploaded document is a valid bill/receipt
+    if local_path and os.path.exists(local_path):
+        raw_text = ocr_service.extract_text_from_file(local_path)
+        if not raw_text or not raw_text.strip():
+            try:
+                os.remove(local_path)
+            except Exception:
+                pass
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid bill: No readable text detected in uploaded file. Please upload a clear purchase receipt or invoice."
+            )
+        is_valid, reason = ai_service.validate_receipt_text(raw_text)
+        if not is_valid:
+            try:
+                os.remove(local_path)
+            except Exception:
+                pass
+            raise HTTPException(
+                status_code=400,
+                detail=reason or "Invalid bill: The uploaded document does not appear to be a valid purchase receipt."
+            )
+
     product.receipt_url = file_url
     product.receipt_filename = filename
     db.commit()

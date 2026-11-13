@@ -1,4 +1,5 @@
 import os
+import socket
 import logging
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
@@ -10,11 +11,25 @@ engine = None
 SessionLocal = None
 Base = declarative_base()
 
+def _can_connect_socket(host: str, port: int, timeout: float = 0.3) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except Exception:
+        return False
+
 def initialize_engine():
     global engine, SessionLocal
     # Try PostgreSQL first
     pg_url = settings.DATABASE_URL
     try:
+        # Fast probe if localhost/127.0.0.1
+        if "localhost" in pg_url or "127.0.0.1" in pg_url:
+            host = "127.0.0.1"
+            port = 5432
+            if not _can_connect_socket(host, port, timeout=0.3):
+                raise ConnectionRefusedError(f"PostgreSQL server not reachable at {host}:{port}")
+
         logger.info(f"Attempting connection to PostgreSQL database at {pg_url.split('@')[-1] if '@' in pg_url else pg_url}...")
         test_engine = create_engine(pg_url, pool_pre_ping=True, connect_args={"connect_timeout": 1})
         with test_engine.connect() as conn:
@@ -22,7 +37,7 @@ def initialize_engine():
         engine = test_engine
         logger.info("Successfully connected to PostgreSQL database!")
     except Exception as e:
-        logger.warning(f"Could not connect to PostgreSQL ({e}). Falling back to local SQLite database: {settings.FALLBACK_SQLITE_URL}")
+        logger.info(f"Using local SQLite database ({e}): {settings.FALLBACK_SQLITE_URL}")
         engine = create_engine(
             settings.FALLBACK_SQLITE_URL,
             connect_args={"check_same_thread": False}

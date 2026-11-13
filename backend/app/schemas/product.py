@@ -56,9 +56,12 @@ class ProductReceiptScanResponse(BaseModel):
     serial_number: Optional[str] = None
     purchase_date: Optional[str] = None
     purchase_price: Optional[float] = None
-    currency: Optional[str] = "USD"
+    currency: Optional[str] = None
     retailer: Optional[str] = None
-    warranty_duration_months: Optional[int] = 12
+    warranty_duration_months: Optional[int] = None
     raw_extracted_text: str
     confidence_notes: Optional[str] = None
+    is_valid_receipt: bool = True
+    receipt_url: Optional[str] = None
+    receipt_filename: Optional[str] = None
 

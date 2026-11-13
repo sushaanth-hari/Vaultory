@@ -64,7 +64,7 @@ def run_tests():
     first_product = products[0]
     print(f"✓ Products List: Found {len(products)} products (Sample: '{first_product['name']}')")
 
-    # 6. OCR Receipt Scanning
+    # 6. OCR Receipt Scanning - Exact extraction & Invalid Bill Rejection
     dummy_receipt_bytes = b"Best Buy Store #1042\nDate: 2024-05-18\nItem: Sony WH-1000XM5 Headphones\nPrice: $399.99\nWarranty: 24 Months"
     ocr_res = client.post(
         "/api/v1/ocr/scan-receipt",
@@ -73,7 +73,21 @@ def run_tests():
     )
     assert ocr_res.status_code == 200, f"OCR scan failed: {ocr_res.text}"
     ocr_data = ocr_res.json()
-    print(f"✓ Tesseract OCR & AI Structuring: Extracted Product '{ocr_data.get('name')}', Price ${ocr_data.get('purchase_price')}, Warranty {ocr_data.get('warranty_duration_months')} mo")
+    assert ocr_data.get("name") == "Sony WH-1000XM5 Headphones", f"Unexpected name: {ocr_data.get('name')}"
+    assert ocr_data.get("purchase_price") == 399.99
+    assert ocr_data.get("warranty_duration_months") == 24
+    print(f"✓ Exact Bill OCR Extraction: Extracted Product '{ocr_data.get('name')}', Price ${ocr_data.get('purchase_price')}, Date {ocr_data.get('purchase_date')}, Warranty {ocr_data.get('warranty_duration_months')} mo")
+
+    # 6B. Test Invalid Bill Rejection at API endpoint
+    invalid_bytes = b"Meeting notes from Monday. Discussing roadmap and sprint items for non-bill document."
+    inv_res = client.post(
+        "/api/v1/ocr/scan-receipt",
+        headers=headers,
+        files={"file": ("meeting_notes.jpg", invalid_bytes, "image/jpeg")}
+    )
+    assert inv_res.status_code == 400, f"Expected 400 rejection for invalid bill, got {inv_res.status_code}"
+    assert "Invalid bill" in inv_res.json()["detail"]
+    print(f"✓ Invalid Bill Rejection: Successfully rejected invalid document with HTTP 400: '{inv_res.json()['detail']}'")
 
     # 7. Create New Product
     new_prod_payload = {

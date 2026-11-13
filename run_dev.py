@@ -13,7 +13,16 @@ def main():
     print("=" * 60)
 
     # 1. Start FastAPI backend
-    backend_cmd = [sys.executable, "-m", "uvicorn", "app.main:app", "--app-dir", "backend", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    venv_python = os.path.join(os.getcwd(), ".venv", "Scripts", "python.exe")
+    python_bin = venv_python if os.path.exists(venv_python) else sys.executable
+    backend_cmd = [
+        python_bin, "-m", "uvicorn", "app.main:app",
+        "--app-dir", "backend",
+        "--host", "127.0.0.1",
+        "--port", "8000",
+        "--reload",
+        "--reload-dir", os.path.join("backend", "app")
+    ]
     backend_proc = subprocess.Popen(backend_cmd)
 
     # 2. Start Vite frontend

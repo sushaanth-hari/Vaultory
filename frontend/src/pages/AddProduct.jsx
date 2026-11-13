@@ -78,26 +78,33 @@ export default function AddProduct() {
       setReceiptUrl(data.receipt_url || '');
       setRawOcrText(data.raw_extracted_text || '');
 
-      // Populate form fields with extracted data
+      // Populate form fields with exact extracted data - strictly without hallucinated values
       setFormData((prev) => ({
         ...prev,
-        name: data.name || prev.name,
-        brand: data.brand || prev.brand,
-        model_number: data.model_number || prev.model_number,
-        serial_number: data.serial_number || prev.serial_number,
-        purchase_date: data.purchase_date || prev.purchase_date,
-        purchase_price: data.purchase_price !== undefined ? data.purchase_price : prev.purchase_price,
+        name: data.name !== undefined && data.name !== null ? data.name : prev.name,
+        brand: data.brand !== undefined && data.brand !== null ? data.brand : prev.brand,
+        model_number: data.model_number !== undefined && data.model_number !== null ? data.model_number : prev.model_number,
+        serial_number: data.serial_number !== undefined && data.serial_number !== null ? data.serial_number : prev.serial_number,
+        purchase_date: data.purchase_date !== undefined && data.purchase_date !== null ? data.purchase_date : prev.purchase_date,
+        purchase_price: data.purchase_price !== undefined && data.purchase_price !== null ? data.purchase_price : prev.purchase_price,
         currency: data.currency || prev.currency,
-        retailer: data.retailer || prev.retailer,
-        warranty_duration_months: data.warranty_duration_months || prev.warranty_duration_months,
+        retailer: data.retailer !== undefined && data.retailer !== null ? data.retailer : prev.retailer,
+        warranty_duration_months: data.warranty_duration_months !== undefined && data.warranty_duration_months !== null ? data.warranty_duration_months : prev.warranty_duration_months,
       }));
 
-      setSuccess('Receipt scanned and structured with Tesseract OCR & AI! Review the fields below before saving.');
+      setSuccess('Valid bill verified! Exact content extracted without fabrication. Review the fields below before saving.');
     } catch (err) {
       console.error('Scan error:', err);
-      setError(err.response?.data?.detail || 'Failed to scan receipt. You can still fill in the details manually.');
+      // Clean state upon rejection so invalid bill cannot be saved
+      setReceiptFile(null);
+      setReceiptUrl('');
+      setRawOcrText('');
+      setError(err.response?.data?.detail || 'Invalid bill: The uploaded document was rejected. Please upload a clear photo or document of a valid purchase receipt.');
     } finally {
       setScanning(false);
+      if (e.target) {
+        e.target.value = '';
+      }
     }
   };
 
@@ -216,7 +223,7 @@ export default function AddProduct() {
             <Upload className="w-8 h-8 text-blue-500 mx-auto mb-2" />
             <h3 className="text-xs font-bold text-slate-800">Upload Purchase Receipt</h3>
             <p className="text-[11px] text-slate-500 mt-0.5 mb-3">
-              Supports JPEG, PNG, or PDF receipts. Text is extracted with Tesseract and structured via OpenAI.
+              Supports JPEG, PNG, or PDF receipts. Exact text is extracted and verified; invalid or non-bill documents are automatically rejected.
             </p>
             <label className="inline-flex items-center space-x-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold cursor-pointer shadow-xs transition">
               <Sparkles className="w-3.5 h-3.5" />
